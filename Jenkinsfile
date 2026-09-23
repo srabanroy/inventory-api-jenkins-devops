@@ -4,6 +4,7 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
+        skipDefaultCheckout(true)
         buildDiscarder(logRotator(numToKeepStr: '20'))
         timeout(time: 30, unit: 'MINUTES')
     }
@@ -29,7 +30,25 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                deleteDir()
+                script {
+                    def repositoryUrl = scm.userRemoteConfigs[0].url
+                    if (repositoryUrl.startsWith('file:')) {
+                        withEnv(["REPOSITORY_URL=${repositoryUrl}"]) {
+                            sh 'git clone --branch main "$REPOSITORY_URL" .'
+                        }
+                    } else {
+                        checkout scm
+                    }
+                    env.GIT_COMMIT = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+                    env.BRANCH_NAME = sh(
+                        script: 'git branch --show-current',
+                        returnStdout: true
+                    ).trim()
+                }
             }
         }
 
