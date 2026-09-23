@@ -1,0 +1,4 @@
+Flask>=3.1,<4
+gunicorn>=23,<24
+prometheus-client>=0.22,<1
+

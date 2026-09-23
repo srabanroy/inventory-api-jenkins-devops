@@ -1,0 +1,34 @@
+groups:
+  - name: inventory-api-availability
+    rules:
+      - alert: InventoryApiDown
+        expr: up{job="inventory-api"} == 0
+        for: 20s
+        labels:
+          severity: critical
+        annotations:
+          summary: Inventory API is unavailable
+          description: Prometheus has been unable to scrape the inventory API for 20 seconds.
+
+      - alert: InventoryApiHighErrorRate
+        expr: |
+          sum(rate(inventory_http_requests_total{status=~"5.."}[2m]))
+          /
+          clamp_min(sum(rate(inventory_http_requests_total[2m])), 0.001)
+          > 0.05
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Inventory API error rate exceeds five percent
+          description: More than five percent of recent requests returned server errors.
+
+      - alert: InventoryDatabaseNotReady
+        expr: inventory_readiness == 0
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: Inventory database readiness check failed
+          description: The application cannot complete its SQLite readiness query.
+

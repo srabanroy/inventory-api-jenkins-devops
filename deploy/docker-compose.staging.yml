@@ -1,0 +1,64 @@
+services:
+  inventory-api:
+    image: ${IMAGE_REPOSITORY:-inventory-api}:${IMAGE_TAG:-local}
+    environment:
+      APP_ENV: staging
+      DATABASE_PATH: /data/inventory.db
+      INVENTORY_API_KEY: ${INVENTORY_API_KEY:-staging-demonstration-key}
+    ports:
+      - "8081:8000"
+    volumes:
+      - staging-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks: [inventory-net]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      inventory-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [inventory-net]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "9093:9093"
+    volumes:
+      - ../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    depends_on: [alert-sink]
+    restart: unless-stopped
+    networks: [inventory-net]
+
+  alert-sink:
+    image: python:3.12-slim
+    command: ["python", "/monitoring/alert_sink.py"]
+    environment:
+      ALERT_SINK_HOST: 0.0.0.0
+    volumes:
+      - ../monitoring:/monitoring:ro
+    restart: unless-stopped
+    networks: [inventory-net]
+
+volumes:
+  staging-data:
+  prometheus-data:
+
+networks:
+  inventory-net:
