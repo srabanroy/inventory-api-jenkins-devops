@@ -13,7 +13,7 @@ pipeline {
         booleanParam(
             name: 'RUN_INCIDENT_TEST',
             defaultValue: true,
-            description: 'Stop staging briefly and verify that Prometheus fires InventoryApiDown'
+            description: 'Stop production briefly and verify alert delivery, recovery, and resolution'
         )
         booleanParam(
             name: 'RUN_ROLLBACK_TEST',
