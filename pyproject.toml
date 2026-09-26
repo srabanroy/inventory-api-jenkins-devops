@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventory-api"
-version = "1.1.0"
+version = "1.1.1"
 description = "A monitored inventory API used to demonstrate a seven-stage Jenkins pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
