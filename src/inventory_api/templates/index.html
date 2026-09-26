@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A lightweight workspace for managing inventory items.">
+    <title>Stockroom | Inventory workspace</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Stockroom home">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <span>Stockroom</span>
+      </a>
+      <div class="service-state" id="service-state" aria-live="polite">
+        <span class="state-dot"></span>
+        <span>Checking service</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Inventory workspace</p>
+          <h1 id="page-title">Know what is on the shelf.</h1>
+          <p class="hero-copy">
+            A focused workspace for tracking stock, updating quantities, and spotting items
+            that need attention.
+          </p>
+        </div>
+
+        <form class="key-panel" id="connection-form">
+          <label for="api-key">API key</label>
+          <div class="key-row">
+            <input
+              id="api-key"
+              name="api-key"
+              type="password"
+              autocomplete="off"
+              placeholder="Enter your access key"
+              required
+            >
+            <button class="button button-dark" type="submit">Connect</button>
+          </div>
+          <p id="connection-help">Stored only for this browser session.</p>
+        </form>
+      </section>
+
+      <section class="summary-grid" aria-label="Inventory summary">
+        <article class="summary-card">
+          <span class="summary-label">Product lines</span>
+          <strong id="product-count">—</strong>
+          <span>Unique SKUs</span>
+        </article>
+        <article class="summary-card">
+          <span class="summary-label">Units on hand</span>
+          <strong id="unit-count">—</strong>
+          <span>Across all products</span>
+        </article>
+        <article class="summary-card summary-attention">
+          <span class="summary-label">Needs attention</span>
+          <strong id="low-stock-count">—</strong>
+          <span>Five units or fewer</span>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <aside class="editor-card" aria-labelledby="editor-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Stock record</p>
+              <h2 id="editor-title">Add an item</h2>
+            </div>
+          </div>
+
+          <form id="item-form">
+            <input id="item-id" type="hidden">
+
+            <label for="sku">SKU</label>
+            <input id="sku" name="sku" maxlength="40" placeholder="e.g. KB-001" required>
+
+            <label for="name">Item name</label>
+            <input
+              id="name"
+              name="name"
+              maxlength="120"
+              placeholder="e.g. Mechanical keyboard"
+              required
+            >
+
+            <label for="quantity">Quantity</label>
+            <input id="quantity" name="quantity" type="number" min="0" step="1" value="0" required>
+
+            <div class="form-actions">
+              <button class="button button-accent" id="save-button" type="submit">Add item</button>
+              <button class="button button-quiet" id="cancel-button" type="button" hidden>Cancel</button>
+            </div>
+          </form>
+        </aside>
+
+        <section class="inventory-card" aria-labelledby="inventory-title">
+          <div class="inventory-toolbar">
+            <div>
+              <p class="eyebrow">Current stock</p>
+              <h2 id="inventory-title">Inventory</h2>
+            </div>
+            <label class="search-field" for="search">
+              <span class="sr-only">Search inventory</span>
+              <input id="search" type="search" placeholder="Search name or SKU">
+            </label>
+          </div>
+
+          <div class="table-wrap">
+            <table id="inventory-table">
+              <thead>
+                <tr>
+                  <th scope="col">Item</th>
+                  <th scope="col">SKU</th>
+                  <th scope="col">Quantity</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="inventory-body">
+                <tr class="message-row">
+                  <td colspan="4">Enter your API key to load inventory.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

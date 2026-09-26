@@ -2,7 +2,7 @@ groups:
   - name: inventory-api-availability
     rules:
       - alert: InventoryApiDown
-        expr: up{job="inventory-api"} == 0
+        expr: up{job="inventory-api-production"} == 0
         for: 20s
         labels:
           severity: critical
@@ -31,4 +31,3 @@ groups:
         annotations:
           summary: Inventory database readiness check failed
           description: The application cannot complete its SQLite readiness query.
-

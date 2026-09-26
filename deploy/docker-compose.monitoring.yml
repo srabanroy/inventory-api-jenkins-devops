@@ -1,0 +1,48 @@
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      alertmanager:
+        condition: service_started
+    restart: unless-stopped
+    networks: [monitoring-net]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - "9093:9093"
+    volumes:
+      - ../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    depends_on:
+      alert-sink:
+        condition: service_started
+    restart: unless-stopped
+    networks: [monitoring-net]
+
+  alert-sink:
+    image: python:3.12-slim
+    command: ["python", "/monitoring/alert_sink.py"]
+    environment:
+      ALERT_SINK_HOST: 0.0.0.0
+    volumes:
+      - ../monitoring:/monitoring:ro
+    restart: unless-stopped
+    networks: [monitoring-net]
+
+volumes:
+  prometheus-data:
+
+networks:
+  monitoring-net:

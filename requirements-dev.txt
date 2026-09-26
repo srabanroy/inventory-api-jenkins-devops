@@ -1,8 +1,8 @@
 -r requirements.txt
-bandit>=1.8,<2
-build>=1.2,<2
-pip-audit>=2.9,<3
-pytest>=8.4,<9
-pytest-cov>=6.2,<8
-ruff>=0.12,<1
-setuptools>=80,<85
+bandit==1.9.4
+build==1.6.1
+pip-audit==2.10.1
+pytest==8.4.2
+pytest-cov==7.1.0
+ruff==0.16.8
+setuptools==84.0.0

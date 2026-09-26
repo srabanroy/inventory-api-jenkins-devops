@@ -11,7 +11,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, TypeVar, cast
 
-from flask import Flask, Response, g, jsonify, request
+from flask import Flask, Response, g, jsonify, render_template, request
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 
 from . import db
@@ -93,6 +93,19 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:  # noqa: C90
     def metrics() -> Response:
         readiness.set(1 if db.database_is_ready(app.config["DATABASE"]) else 0)
         return Response(generate_latest(registry), mimetype="text/plain; version=0.0.4")
+
+    @app.get("/version")
+    def version() -> Response:
+        """Expose release identity so deployment checks can verify the promoted version."""
+        return jsonify(
+            version=os.getenv("APP_VERSION", "development"),
+            environment=app.config["ENVIRONMENT"],
+        )
+
+    @app.get("/")
+    def dashboard() -> str:
+        """Serve the lightweight browser interface; data remains provided by the API."""
+        return render_template("index.html")
 
     @app.get("/api/items")
     @require_api_key

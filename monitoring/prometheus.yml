@@ -11,8 +11,7 @@ alerting:
         - targets: ["alertmanager:9093"]
 
 scrape_configs:
-  - job_name: inventory-api
+  - job_name: inventory-api-production
     metrics_path: /metrics
     static_configs:
-      - targets: ["inventory-api:8000"]
-
+      - targets: ["host.docker.internal:8082"]

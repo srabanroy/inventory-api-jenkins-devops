@@ -2,7 +2,7 @@
 
 This project implements the seven assessed Jenkins stages for SIT223/SIT753 Task 7.3HD: Build, Test, Code Quality, Security, Deploy, Release, and Monitoring.
 
-The application is a small Flask inventory service with API-key authentication, SQLite persistence, CRUD endpoints, health checks, and Prometheus metrics. Its scope is intentionally compact so the pipeline evidence remains easy to explain in a ten-minute demonstration.
+The application is a small Flask inventory service with a responsive browser dashboard, API-key authentication, SQLite persistence, CRUD endpoints, health checks, and Prometheus metrics. Its scope is intentionally compact so the pipeline evidence remains easy to explain in a ten-minute demonstration.
 
 ## Local setup
 
@@ -25,6 +25,10 @@ export INVENTORY_API_KEY=change-this-local-key
 flask --app inventory_api:create_app run --host 127.0.0.1 --port 8000
 ```
 
+Open `http://127.0.0.1:8000` and connect with the development key
+`change-this-local-key`. The dashboard can list, search, create, edit, and delete inventory
+items. It uses plain HTML, CSS, and JavaScript, so it adds no frontend build dependency.
+
 Example request:
 
 ```bash
@@ -33,30 +37,41 @@ curl -H 'X-API-Key: change-this-local-key' http://127.0.0.1:8000/api/items
 
 ## Container deployment
 
-Start staging and its monitoring stack:
+Start staging:
 
 ```bash
 docker build -t inventory-api:local .
 IMAGE_TAG=local docker compose -f deploy/docker-compose.staging.yml up -d
-./scripts/smoke_test.sh http://127.0.0.1:8081
+./scripts/smoke_test.sh http://127.0.0.1:8081 "$INVENTORY_API_KEY" local
 ```
 
-Prometheus is exposed at `http://127.0.0.1:9090` and Alertmanager at `http://127.0.0.1:9093`. The local alert sink logs received alerts so the monitoring stage is demonstrable without an external account.
+The Jenkins pipeline deploys production on `http://127.0.0.1:8082`, then starts a separate
+monitoring stack. Prometheus is exposed at `http://127.0.0.1:9090` and Alertmanager at
+`http://127.0.0.1:9093`. Prometheus monitors production, while the local team-webhook receiver logs
+firing and resolved notifications so alert delivery is demonstrable without an external account.
 
 ## Jenkins setup
 
-1. Push this directory to a Git repository.
-2. In Jenkins, create a **Pipeline from SCM** job and point it to the repository.
-3. Set the script path to `Jenkinsfile`.
-4. Ensure the Jenkins agent has Python 3.11 or later, Docker, and Docker Compose.
-5. Run the pipeline. The default incident-test parameter stops the staging service briefly, verifies that Prometheus fires `InventoryApiDown`, and restores the service.
+1. Clone this GitHub repository and confirm that `main` contains `Jenkinsfile`.
+2. Ensure the Jenkins agent has Python 3.11 or later, Docker, Docker Compose, Git, and `curl`.
+3. In **Manage Jenkins → Credentials**, create a Secret text credential with ID
+   `inventory-api-key`. This one masked value is used by staging, production and smoke tests.
+4. Create a **Pipeline from SCM** job, select Git, enter the GitHub repository URL and provide a
+   GitHub credential if the repository is private.
+5. Set the branch to `*/main` and the script path to `Jenkinsfile`.
+6. Save and choose **Build Now**. SCM polling also checks for changes every five minutes.
+7. The default incident test stops production briefly, proves that `InventoryApiDown` fires,
+   verifies Alertmanager delivery, restores production and confirms the resolved notification.
 
-The release stage runs on the `main` branch and in a local single-branch Jenkins job. It tags the verified image with the version in `VERSION`, creates `release-manifest.json`, and deploys the production Compose definition on port 8082. The demonstration pipeline generates an ephemeral API key for each deployment; use a Jenkins credential and a registry credential before publishing outside the local host.
+The release stage runs only for `main`. It tags the verified image with the version in `VERSION`,
+creates `release-manifest.json`, and deploys production on port 8082. Set
+`RUN_ROLLBACK_TEST=true` with a previously built `ROLLBACK_VERSION` to deploy that immutable image,
+run full smoke checks, and restore the current release. The resulting evidence is archived.
 
 ## Project structure
 
 ```text
-src/inventory_api/           Application and database code
+src/inventory_api/           Application, database, templates, and static frontend assets
 tests/unit/                  Focused validation tests
 tests/integration/           API and persistence tests
 deploy/                      Staging and production Compose definitions

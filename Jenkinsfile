@@ -15,6 +15,20 @@ pipeline {
             defaultValue: true,
             description: 'Stop staging briefly and verify that Prometheus fires InventoryApiDown'
         )
+        booleanParam(
+            name: 'RUN_ROLLBACK_TEST',
+            defaultValue: false,
+            description: 'Temporarily deploy ROLLBACK_VERSION, verify it, then restore the current release'
+        )
+        string(
+            name: 'ROLLBACK_VERSION',
+            defaultValue: '1.1.0',
+            description: 'Previously built semantic version used by the optional rollback verification'
+        )
+    }
+
+    triggers {
+        pollSCM('H/5 * * * *')
     }
 
     environment {
@@ -23,8 +37,11 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
         STAGING_PROJECT = 'inventory-staging'
         PRODUCTION_PROJECT = 'inventory-production'
+        MONITORING_PROJECT = 'inventory-monitoring'
         STAGING_URL = 'http://127.0.0.1:8081'
+        PRODUCTION_URL = 'http://127.0.0.1:8082'
         PROMETHEUS_URL = 'http://127.0.0.1:9090'
+        ALERTMANAGER_URL = 'http://127.0.0.1:9093'
     }
 
     stages {
@@ -44,10 +61,14 @@ pipeline {
                         script: 'git rev-parse HEAD',
                         returnStdout: true
                     ).trim()
-                    env.BRANCH_NAME = sh(
-                        script: 'git branch --show-current',
-                        returnStdout: true
-                    ).trim()
+                    def detectedBranch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''
+                    env.SOURCE_BRANCH = detectedBranch.replaceFirst(/^origin\//, '')
+                    if (!env.SOURCE_BRANCH || env.SOURCE_BRANCH == 'HEAD') {
+                        env.SOURCE_BRANCH = sh(
+                            script: 'git branch --show-current',
+                            returnStdout: true
+                        ).trim()
+                    }
                 }
             }
         }
@@ -60,13 +81,15 @@ pipeline {
                     "$VENV/bin/python" -m pip install --upgrade pip
                     "$VENV/bin/python" -m pip install -r requirements-dev.txt
                     "$VENV/bin/python" -m pip install -e .
+                    "$VENV/bin/python" -m pip freeze > resolved-dependencies.txt
                     "$VENV/bin/python" -m build --wheel --no-isolation
                     docker build \
                         --label "org.opencontainers.image.revision=$GIT_COMMIT" \
                         --label "org.opencontainers.image.version=$BUILD_NUMBER" \
                         -t "$IMAGE_REPOSITORY:$IMAGE_TAG" .
+                    docker image inspect "$IMAGE_REPOSITORY:$IMAGE_TAG" > image-metadata.json
                 '''
-                archiveArtifacts artifacts: 'dist/*.whl', fingerprint: true
+                archiveArtifacts artifacts: 'dist/*.whl,image-metadata.json,resolved-dependencies.txt', fingerprint: true
             }
         }
 
@@ -95,8 +118,8 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    "$VENV/bin/ruff" check src tests --output-format=full
-                    "$VENV/bin/ruff" format --check src tests
+                    "$VENV/bin/ruff" check src tests scripts monitoring --output-format=full
+                    "$VENV/bin/ruff" format --check src tests scripts monitoring
                 '''
             }
         }
@@ -105,7 +128,7 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    "$VENV/bin/bandit" -q -r src -ll -f json -o bandit-report.json
+                    "$VENV/bin/bandit" -q -r src scripts monitoring -ll -f json -o bandit-report.json
                     "$VENV/bin/pip-audit" -r requirements.txt --format=json --output=pip-audit-report.json
                 '''
                 archiveArtifacts artifacts: '*-report.json', fingerprint: true
@@ -114,42 +137,61 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sh '''
-                    set -eu
-                    DEMO_KEY=$("$VENV/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')
-                    IMAGE_REPOSITORY="$IMAGE_REPOSITORY" IMAGE_TAG="$IMAGE_TAG" \
-                    INVENTORY_API_KEY="$DEMO_KEY" \
-                    docker compose --project-name "$STAGING_PROJECT" \
-                        -f deploy/docker-compose.staging.yml up -d --wait
-                    ./scripts/smoke_test.sh "$STAGING_URL"
-                '''
+                withCredentials([string(credentialsId: 'inventory-api-key', variable: 'INVENTORY_API_KEY')]) {
+                    sh '''
+                        set -eu
+                        IMAGE_REPOSITORY="$IMAGE_REPOSITORY" IMAGE_TAG="$IMAGE_TAG" \
+                        INVENTORY_API_KEY="$INVENTORY_API_KEY" \
+                        docker compose --project-name "$STAGING_PROJECT" \
+                            -f deploy/docker-compose.staging.yml up -d --wait
+                        ./scripts/smoke_test.sh "$STAGING_URL" "$INVENTORY_API_KEY" "$IMAGE_TAG"
+                    '''
+                }
             }
         }
 
         stage('Release') {
             when {
                 expression {
-                    return env.BRANCH_NAME == null || env.BRANCH_NAME == 'main'
+                    return env.SOURCE_BRANCH == 'main'
                 }
             }
             steps {
-                sh '''
-                    set -eu
-                    APP_VERSION=$(tr -d '[:space:]' < VERSION)
-                    "$VENV/bin/python" scripts/create_release_manifest.py \
-                        --version "$APP_VERSION" \
-                        --build-number "$BUILD_NUMBER" \
-                        --commit "$GIT_COMMIT" \
-                        --image "$IMAGE_REPOSITORY:$APP_VERSION"
-                    docker tag "$IMAGE_REPOSITORY:$IMAGE_TAG" "$IMAGE_REPOSITORY:$APP_VERSION"
-                    DEMO_KEY=$("$VENV/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')
-                    IMAGE_REPOSITORY="$IMAGE_REPOSITORY" APP_VERSION="$APP_VERSION" \
-                    INVENTORY_API_KEY="$DEMO_KEY" \
-                    docker compose --project-name "$PRODUCTION_PROJECT" \
-                        -f deploy/docker-compose.production.yml up -d --wait
-                    ./scripts/smoke_test.sh http://127.0.0.1:8082
-                '''
+                withCredentials([string(credentialsId: 'inventory-api-key', variable: 'INVENTORY_API_KEY')]) {
+                    sh '''
+                        set -eu
+                        APP_VERSION=$(tr -d '[:space:]' < VERSION)
+                        "$VENV/bin/python" scripts/create_release_manifest.py \
+                            --version "$APP_VERSION" \
+                            --build-number "$BUILD_NUMBER" \
+                            --commit "$GIT_COMMIT" \
+                            --image "$IMAGE_REPOSITORY:$APP_VERSION"
+                        docker tag "$IMAGE_REPOSITORY:$IMAGE_TAG" "$IMAGE_REPOSITORY:$APP_VERSION"
+                        IMAGE_REPOSITORY="$IMAGE_REPOSITORY" APP_VERSION="$APP_VERSION" \
+                        INVENTORY_API_KEY="$INVENTORY_API_KEY" \
+                        docker compose --project-name "$PRODUCTION_PROJECT" \
+                            -f deploy/docker-compose.production.yml up -d --wait
+                        ./scripts/smoke_test.sh "$PRODUCTION_URL" "$INVENTORY_API_KEY" "$APP_VERSION"
+                    '''
+                    script {
+                        if (params.RUN_ROLLBACK_TEST) {
+                            sh '''
+                                set -eu
+                                APP_VERSION=$(tr -d '[:space:]' < VERSION)
+                                ./scripts/rollback.sh "$ROLLBACK_VERSION" "$PRODUCTION_URL" "$INVENTORY_API_KEY"
+                                IMAGE_REPOSITORY="$IMAGE_REPOSITORY" APP_VERSION="$APP_VERSION" \
+                                INVENTORY_API_KEY="$INVENTORY_API_KEY" \
+                                docker compose --project-name "$PRODUCTION_PROJECT" \
+                                    -f deploy/docker-compose.production.yml up -d --wait
+                                ./scripts/smoke_test.sh "$PRODUCTION_URL" "$INVENTORY_API_KEY" "$APP_VERSION"
+                                printf 'Current release restored after rollback verification: %s\n' "$APP_VERSION" \
+                                    >> rollback-evidence.txt
+                            '''
+                        }
+                    }
+                }
                 archiveArtifacts artifacts: 'release-manifest.json', fingerprint: true
+                archiveArtifacts artifacts: 'rollback-evidence.txt', allowEmptyArchive: true, fingerprint: true
             }
         }
 
@@ -157,14 +199,16 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    docker compose --project-name "$STAGING_PROJECT" \
-                        -f deploy/docker-compose.staging.yml exec -T prometheus \
+                    docker compose --project-name "$MONITORING_PROJECT" \
+                        -f deploy/docker-compose.monitoring.yml up -d --wait
+                    docker compose --project-name "$MONITORING_PROJECT" \
+                        -f deploy/docker-compose.monitoring.yml exec -T prometheus \
                         promtool check rules /etc/prometheus/alerts.yml
-                    ./scripts/monitoring_check.sh "$PROMETHEUS_URL"
+                    ./scripts/monitoring_check.sh "$PROMETHEUS_URL" "$ALERTMANAGER_URL"
                 '''
                 script {
                     if (params.RUN_INCIDENT_TEST) {
-                        sh './scripts/simulate_incident.sh "$STAGING_PROJECT" "$PROMETHEUS_URL"'
+                        sh './scripts/simulate_incident.sh "$PRODUCTION_PROJECT" "$PROMETHEUS_URL" "$MONITORING_PROJECT" "$PRODUCTION_URL"'
                     }
                 }
             }
@@ -176,8 +220,12 @@ pipeline {
             sh '''
                 docker compose --project-name "$STAGING_PROJECT" \
                     -f deploy/docker-compose.staging.yml logs --no-color > staging-compose.log 2>&1 || true
+                docker compose --project-name "$PRODUCTION_PROJECT" \
+                    -f deploy/docker-compose.production.yml logs --no-color > production-compose.log 2>&1 || true
+                docker compose --project-name "$MONITORING_PROJECT" \
+                    -f deploy/docker-compose.monitoring.yml logs --no-color > monitoring-compose.log 2>&1 || true
             '''
-            archiveArtifacts artifacts: 'staging-compose.log', allowEmptyArchive: true
+            archiveArtifacts artifacts: '*-compose.log', allowEmptyArchive: true
         }
     }
 }

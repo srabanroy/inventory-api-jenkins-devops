@@ -4,17 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inventory-api"
-version = "1.0.0"
+version = "1.1.0"
 description = "A monitored inventory API used to demonstrate a seven-stage Jenkins pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "Flask>=3.1,<4",
-  "prometheus-client>=0.22,<1",
+  "Flask==3.1.3",
+  "prometheus-client==0.26.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+inventory_api = ["templates/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-markers"
@@ -44,4 +47,3 @@ max-complexity = 8
 
 [tool.bandit]
 exclude_dirs = ["tests"]
-

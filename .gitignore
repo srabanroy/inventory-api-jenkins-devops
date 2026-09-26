@@ -15,4 +15,9 @@ test-results.xml
 bandit-report.json
 pip-audit-report.json
 staging-compose.log
+production-compose.log
+monitoring-compose.log
+image-metadata.json
+resolved-dependencies.txt
+rollback-evidence.txt
 .env

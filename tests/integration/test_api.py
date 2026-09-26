@@ -1,10 +1,36 @@
 """Integration tests exercise HTTP routing, authentication, persistence, and metrics."""
 
 
+def test_dashboard_serves_inventory_frontend(client):
+    response = client.get("/")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Inventory workspace" in body
+    assert 'id="inventory-table"' in body
+    assert 'src="/static/app.js"' in body
+
+
+def test_frontend_assets_are_packaged(client):
+    stylesheet = client.get("/static/styles.css")
+    script = client.get("/static/app.js")
+
+    assert stylesheet.status_code == 200
+    assert script.status_code == 200
+    assert "Inventory dashboard" in script.get_data(as_text=True)
+
+
 def test_health_reports_database_readiness(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.get_json() == {"database": True, "status": "ok"}
+
+
+def test_version_reports_environment(client):
+    response = client.get("/version")
+
+    assert response.status_code == 200
+    assert response.get_json() == {"environment": "test", "version": "development"}
 
 
 def test_inventory_requires_api_key(client):
