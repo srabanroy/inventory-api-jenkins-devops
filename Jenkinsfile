@@ -199,8 +199,11 @@ pipeline {
             steps {
                 sh '''
                     set -eu
+                    # Jenkins deleteDir() replaces bind-mounted config files between builds.
+                    # Recreate the monitoring containers so Prometheus always mounts files
+                    # from the current GitHub checkout rather than a deleted inode.
                     docker compose --project-name "$MONITORING_PROJECT" \
-                        -f deploy/docker-compose.monitoring.yml up -d --wait
+                        -f deploy/docker-compose.monitoring.yml up -d --wait --force-recreate
                     docker compose --project-name "$MONITORING_PROJECT" \
                         -f deploy/docker-compose.monitoring.yml exec -T prometheus \
                         promtool check rules /etc/prometheus/alerts.yml
