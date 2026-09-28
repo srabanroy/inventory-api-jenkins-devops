@@ -56,8 +56,7 @@ firing and resolved notifications so alert delivery is demonstrable without an e
 2. Ensure the Jenkins agent has Python 3.11 or later, Docker, Docker Compose, Git, and `curl`.
 3. In **Manage Jenkins → Credentials**, create a Secret text credential with ID
    `inventory-api-key`. This one masked value is used by staging, production and smoke tests.
-4. Create a **Pipeline from SCM** job, select Git, enter the GitHub repository URL and provide a
-   GitHub credential if the repository is private.
+4. Create a **Pipeline from SCM** job, select Git, and enter the public GitHub repository URL.
 5. Set the branch to `*/main` and the script path to `Jenkinsfile`.
 6. Save and choose **Build Now**. SCM polling also checks for changes every five minutes.
 7. The default incident test stops production briefly, proves that `InventoryApiDown` fires,
@@ -87,3 +86,8 @@ Jenkinsfile                  Seven-stage declarative pipeline
 - The container runs as an unprivileged user.
 - Bandit scans application code and `pip-audit` checks third-party packages.
 - Secrets are supplied through environment variables and are not committed.
+
+## Technical validation evidence
+
+- `7.3HD_Inventory_DevOps_Execution.ipynb`: locally executed, commented validation notebook.
+- `evidence/`: the delivery architecture and authentic successful Jenkins build #6 capture.
