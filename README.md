@@ -4,6 +4,11 @@ This project implements the seven assessed Jenkins stages for SIT223/SIT753 Task
 
 The application is a small Flask inventory service with a responsive browser dashboard, API-key authentication, SQLite persistence, CRUD endpoints, health checks, and Prometheus metrics. Its scope is intentionally compact so the pipeline evidence remains easy to explain in a ten-minute demonstration.
 
+**Live interface demo:** <https://srabanroy.github.io/inventory-api-jenkins-devops/>
+
+The GitHub Pages demo supports browser-local create, search, edit, delete, and reset operations.
+The assessed deployment remains the authenticated Flask and SQLite service released by Jenkins.
+
 ## Local setup
 
 ```bash
